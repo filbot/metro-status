@@ -1,3 +1,5 @@
+'use strict'
+
 var express = require('express');
 var rp = require('request-promise');
 var app = express();
