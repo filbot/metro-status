@@ -1,12 +1,10 @@
-'use strict'
-
 var express = require('express');
 var rp = require('request-promise');
 var app = express();
 
 // set the port of our application
 // process.env.PORT lets the port be set by Heroku
-var port = process.env.PORT || 8080;
+var port = process.env.PORT || 3000;
 
 
 function mean(numbers) {
@@ -25,7 +23,7 @@ var options = {
 app.get('/', function (req, res) {
   rp(options)
     .then(function (data) {
-      let minutesArray = [];
+      var minutesArray = [];
       for (var i = 0; i < data.items.length; i++) {
         minutesArray.push(data.items[i].minutes);
       }
@@ -36,6 +34,4 @@ app.get('/', function (req, res) {
     });
 });
 
-app.listen(port, function() {
-    console.log('Our app is running on http://localhost:' + port);
-});
+app.listen(port);
