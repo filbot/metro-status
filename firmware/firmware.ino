@@ -1,148 +1,128 @@
 #include <SPI.h>
-#include <HttpClient.h>
-#include <Ethernet.h>
-#include <EthernetClient.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <ESP8266WiFi.h>
 
-// Name of the server we want to connect to
-const char kHostname[] = "api.metro.net";
-// Path to download (this is the bit after the hostname in the URL
-// that you want to download
-const char kPath[] = "/agencies/lametro-rail/stops/80136/predictions/";
+#define OLED_RESET LED_BUILTIN
+Adafruit_SSD1306 display(OLED_RESET);
 
-byte mac[] = { 0x90, 0xA2, 0xDA, 0x00, 0x32, 0xFE };
+#if (SSD1306_LCDHEIGHT != 64)
+#error("Height incorrect, please fix Adafruit_SSD1306.h!");
+#endif
 
-// Number of milliseconds to wait without receiving any data before we give up
-const int kNetworkTimeout = 30 * 1000;
-// Number of milliseconds to wait if no data is available before trying again
-const int kNetworkDelay = 1000;
+const char* ssid     = "sm-1337";
+const char* password = "hacktheplanet";
 
-void getData() {
-  int err = 0;
-  boolean endBrace = false;
-  boolean readingJson = true;
-  char json[400];
-  int index = 0;
-  int countBrace = 0;
-  EthernetClient c;
-  HttpClient http(c);
+const char* host = "metro-data.herokuapp.com";
 
-  err = http.get(kHostname, kPath);
+int value = 0;
 
-  if (err == 0) {
-    Serial.println("startedRequest ok");
-    err = http.responseStatusCode();
-    if (err >= 0) {
-      Serial.print("Got status code: ");
-      Serial.println(err);
-      err = http.skipResponseHeaders();
-      if (err >= 0) {
-        int bodyLen = http.contentLength();
-        Serial.print("Content length is: ");
-        Serial.println(bodyLen);
-        Serial.println();
-        Serial.println("Body returned follows:");
+void setup() {
+  Serial.begin(115200);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3D);
 
-        // Now we've got to the body, so we can print it out
-        unsigned long timeoutStart = millis();
-        char c;
+  // Clear the buffer.
+  display.clearDisplay();
+  display.display();
 
-        // Whilst we haven't timed out & haven't reached the end of the body
-        while ( (http.connected() || http.available()) && ((millis() - timeoutStart) < kNetworkTimeout) ) {
-          c = http.read();
-          // if quotes, add a slash then quotes
-          if (c == '\"' ) {
-            // insert slash
-            json[index] = '\\';
-            index++;
-            // Store it
-            json[index] = c;
-            index++;
-          } else if (c == '}') { // if end bracket, add bracket and then quotes and break loop
-            // Store it
-            json[index] = c;
-            index++;
-            json[index] = '\"';
-            index++;
-            endBrace = true;
-          } else { // if no special characters, add to array
-            // Store it
-            json[index] = c;
-            index++;
-          }
+  delay(10);
 
-          // second bracket, add quotes
-          if (c == "{" && countBrace == 1) {
-            json[index] = '\"';
-            index++;
-            json[index] = c; // Store it
-            index++;
-            readingJson = true;
-            countBrace == 2;
-          }
+  // We start by connecting to a WiFi network
 
-          // first brace detected, skipped
-          if (c == "{" && countBrace == 0) {
-            countBrace = 1;
-          }
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
 
-          bodyLen--;
-          // We read something, reset the timeout counter
-          timeoutStart = millis();
-          } else {
-            // We haven't got any data, so let's pause to allow some to arrive
-            delay(kNetworkDelay);
-          }
+  WiFi.begin(ssid, password);
 
-          //checking index
-          Serial.println(" ");
-          Serial.println("index is ");
-          Serial.println(index);
-          Serial.println(" ");
-
-          // checking char stored
-          Serial.println(" ");
-          Serial.println("json READ ");
-          Serial.println(" ");
-
-          for (int i = 0; i < index; i++) {
-            Serial.print(json[i]);
-          } else {
-            Serial.print("Failed to skip response headers: ");
-            Serial.println(err);
-          }
-
-      } else {
-          Serial.print("Getting response failed: ");
-          Serial.println(err);
-        }
-    } else {
-        Serial.print("Connect failed: ");
-        Serial.println(err);
-      }
-
-      http.stop();
-
-      // And just stop, now that we've tried a download
-      while (1);
-}
-
-void setup()
-{
-  // initialize serial communications at 9600 bps:
-  Serial.begin(9600);
-
-  while (Ethernet.begin(mac) != 1)
-  {
-    Serial.println("Error getting IP address via DHCP, trying again...");
-    delay(15000);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    display.setTextSize(1);
+    display.println(".");
+    display.display();
+    delay(1);
+    display.startscrollright(0x00, 0x0F);
   }
 
-  // get data from api.metro.com
-  getData();
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
-void loop()
-{
-  // not used
-}
+void loop() {
+  delay(60000);
+  display.clearDisplay();
+  display.display();
+  ++value;
 
+  Serial.print("connecting to ");
+  Serial.println(host);
+
+  // Use WiFiClient class to create TCP connections
+  WiFiClient client;
+  const int httpPort = 80;
+  if (!client.connect(host, httpPort)) {
+    Serial.println("connection failed");
+    return;
+  }
+
+  String url = "/";
+
+  Serial.print("Requesting URL: ");
+  Serial.println(url);
+
+  // This will send the request to the server
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "Connection: close\r\n\r\n");
+  unsigned long timeout = millis();
+  while (client.available() == 0) {
+    if (millis() - timeout > 60000) {
+      Serial.println(">>> Client Timeout !");
+      client.stop();
+      return;
+    }
+  }
+
+  boolean currentLineIsBlank = true;
+  // Read all the lines of the reply from server and print them to Serial
+  while (client.available()) {
+    char c = client.read();
+    if (c == '\n' && currentLineIsBlank) {
+      String line = client.readStringUntil('\r');
+      Serial.print(line);
+      display.setTextColor(WHITE);
+      display.setCursor(0, 0);
+      display.setTextSize(1);
+      display.println("");
+      display.println("Trains every");
+      display.println("");
+      display.setTextSize(3);
+      display.setCursor(18, 20);
+      display.println(line);
+      display.setTextSize(1);
+      display.setCursor(14, 45);
+      display.println("minutes");
+      display.display();
+      delay(1);
+      display.startscrollright(0x00, 0x0F);
+    }
+    if (c == '\n') {
+      // you're starting a new line
+      currentLineIsBlank = true;
+    } else if (c != '\r') {
+      // you've gotten a character on the current line
+      currentLineIsBlank = false;
+    }
+  }
+
+  Serial.println();
+  Serial.println("closing connection");
+}
